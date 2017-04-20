@@ -27,3 +27,43 @@ the 30 second period, and the rolling back to the after after that.
 The finest granularity is 1 second for the selection of the directories.  Directories 
 with names that represent numbers larger than the window option allows will be
 ignored.
+
+## Headless Installation
+
+The HttpRoller is generally used as an interactive test tool however it can be 
+installed as a systemd service.  Doing this requires that the HttpRoller.service
+file is first modified to point at the test scenario that is needed.  The default
+setting points to a test case within the pi-gateway suite.
+
+The HttpRoller can be installed using systemd.  The HttpRoller.service file should be
+modified to ensure that the appropriate listening socket is set and that the path
+argument points to the appropriate location for the rolling test.  The service file
+is then copied into the /lib/systemd/system/ directory.
+
+These instructions assume that the HttpRoller has been git cloned into your
+/home/pi/HttpRoller directory and that the binaries and other files are
+provided to the systemd daemon from this location.  It also assumes for
+the default test case that the pi-gateway has been git cloned also into the
+/home/pi/pi-gateway directory and that the test scenario files are there.
+
+If you have used a binary manually copied to the system or other arrangement 
+you will need to modify the HttpRoller.service file before using the following
+instructions.
+
+<pre>
+sudo cp HttpRoller.service /lib/systemd/system/HttpRoller.service
+sudo chmod 644 /lib/systemd/system/HttpRoller.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable HttpRoller.service
+</pre>
+
+After headless installation the Pi should be rebooted. Logging output
+from the pi-gateway unit can be seen using the following command:
+
+<pre>
+sudo journalctl -u HttpRoller
+</pre>
+
+To follow the output use the '-f' option.
+

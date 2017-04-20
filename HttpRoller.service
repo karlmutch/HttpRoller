@@ -1,0 +1,14 @@
+[Unit]
+Description=HttpRoller json time based testing server
+After=multi-user.target
+
+[Service]
+Type=idle
+Environment=LOGXI=*
+Environment=LOGXI_FORMAT=happy,maxcol=4096
+ExecStart=
+ExecStart=/home/pi/HttpRoller/bin/HttpRoller -loglevel=debug -listen "127.0.0.1:12345" -path /home/pi/pi-gateway/simulator/scenarios/XM_drain_all -window 130s
+
+[Install]
+WantedBy=multi-user.target
+
