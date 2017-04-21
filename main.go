@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ var (
 
 	listen = flag.String("listen", ":8080", "Address to bind to")
 	path   = flag.String("path", "./", "Path served as document root.")
-	window = flag.Duration("window", time.Duration(2*time.Minute), "The duration of the rolling time window")
 )
 
 type testSlot struct {
@@ -65,8 +65,10 @@ func main() {
 	// scenario directory
 	loadTest(*path)
 
-	// Start the window reset
-	go windowReset(*window)
+	// Start a service function that tracks over time the slots
+	// and scenarios being used
+	//
+	go auditWindow()
 
 	http.HandleFunc("/", serveHandler)
 
@@ -76,13 +78,12 @@ func main() {
 }
 
 // loadTest examines the scenario directory for the serve directories
-// that will be used within the window and loads them into the testSchedule
+// that will be used and loads them into the testSchedule
 //
 func loadTest(scenario string) (err error) {
 	testSchedule.Lock()
 	defer testSchedule.Unlock()
 
-	// period := int64((*window).Seconds())
 	testSchedule.startTime = time.Now().Round(time.Second)
 	testSchedule.slots = []*testSlot{}
 
@@ -111,25 +112,9 @@ func loadTest(scenario string) (err error) {
 		return testSchedule.slots[i].secondSlot < testSchedule.slots[j].secondSlot
 	})
 
+	logW.Debug(fmt.Sprintf("loaded scenario %s", scenario))
+
 	return err
-}
-
-// windowReset restarts the time window in which the server is running
-// after the duration of the window passes
-//
-func windowReset(window time.Duration) {
-	resetAt := time.NewTicker(window)
-
-	for {
-		select {
-		case <-resetAt.C:
-			logW.Debug("test time window rewound")
-			// Window has elapsed reset the test schedule back to the start
-			// and reload the scenario directory in case new tests have
-			// been added
-			loadTest(*path)
-		}
-	}
 }
 
 func getSlotDir() (dir string) {
@@ -162,6 +147,14 @@ func auditWindow() {
 		select {
 		case <-tick.C:
 			logW.Debug(fmt.Sprintf("using %s", getSlotDir()))
+
+			files, _ := ioutil.ReadDir(getSlotDir())
+			for _, aFile := range files {
+				if aFile.Name() == "finish" {
+					loadTest(*path)
+					break
+				}
+			}
 		}
 	}
 }
