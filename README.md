@@ -15,7 +15,7 @@ having a slot directory that contains a file "finish".
 When starting the web server you would use a command such as:
 
 <pre>
-/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=~/pi-gateway/simulator/scenarios/default
+/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=/home/pi/pi-gateway/simulator/scenarios/default
 </pre>
 
 If the directory scenarios/default contained two directories with a file named json:
@@ -31,6 +31,65 @@ the 30 second period, and the rolling back to the after after that.
 The finest granularity is 1 second for the selection of the directories.  Directories 
 with names that represent numbers larger than the window option allows will be
 ignored.
+
+## Scenario Push
+
+This feature allows for completely remotely controlled testing to occur.
+
+The HttpRoller is equiped with a special HTTP Endpoint, "/configure".  This
+endpoint is enabled only when the -remote option is enabled.  When enabled
+an Http GET operation that starts with "/configure" will result in the URI path 
+without the "/configure" portion being interpreted as file system path, and 
+that in turn is used to populate a new test scenario to be loaded into the server.
+
+As an example using the following linux command would reset the test
+server to initate the XM_drain_all test from the pi-gateway test
+suite and serve it up to the pi-gateway.
+
+<pre>
+wget -O- http://127.0.0.1:12345/configure/home/pi/pi-gateway/simulator/scenarios/XM_drain_all
+</pre>
+
+If you were running the HttpRoller in a shell session and ran the above command
+at approximately the 9 second mark you could well see something
+like the following:
+
+<pre>
+bin/HttpRoller -path scenario/default -loglevel=debug --listen=127.0.0.1:12345 -remote
+21:36:27.178541 DBG HttpRoller loaded scenario scenario/default
+21:36:27.679789 DBG HttpRoller using scenario/default/0
+21:36:28.180561 DBG HttpRoller using scenario/default/0
+21:36:28.679786 DBG HttpRoller using scenario/default/0
+21:36:29.179780 DBG HttpRoller using scenario/default/2
+21:36:29.679787 DBG HttpRoller using scenario/default/2
+21:36:30.179997 DBG HttpRoller using scenario/default/2
+21:36:30.679968 DBG HttpRoller using scenario/default/2
+21:36:31.179981 DBG HttpRoller using scenario/default/5
+21:36:31.180872 DBG HttpRoller loaded scenario scenario/default
+21:36:31.679987 DBG HttpRoller using scenario/default/0
+21:36:32.180013 DBG HttpRoller using scenario/default/0
+21:36:32.680036 DBG HttpRoller using scenario/default/0
+21:36:33.180026 DBG HttpRoller using scenario/default/2
+21:36:33.679865 DBG HttpRoller using scenario/default/2
+21:36:34.179799 DBG HttpRoller using scenario/default/2
+21:36:34.623002 DBG HttpRoller forced load of /home/pi/pi-gateway/simulator/scenarios/XM_drain_all occurring
+21:36:34.623955 DBG HttpRoller loaded scenario /home/pi/pi-gateway/simulator/scenarios/XM_drain_all
+21:36:34.679859 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/0
+21:36:35.179881 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/0
+21:36:35.679719 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/0
+21:36:36.179736 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/0
+21:36:36.679737 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/0
+21:36:37.179753 DBG HttpRoller using /home/pi/pi-gateway/simulator/scenarios/XM_drain_all/5
+</pre>
+
+The server will attempt to ignore and return errors for any relative path 
+references used.
+
+The new scenario will be applied immediately.
+
+This of course has a major potential for absue should a third party get 
+access to the server and so should only be used in private networks, or
+under strictly controlled circumstances.
 
 ## Headless Installation
 

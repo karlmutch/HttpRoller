@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,8 +20,9 @@ import (
 var (
 	logLevel = flag.String("loglevel", "debug", "Set the desired log level")
 
-	listen = flag.String("listen", ":8080", "Address to bind to")
-	path   = flag.String("path", "./", "Path served as document root.")
+	listen       = flag.String("listen", ":8080", "Address to bind to")
+	scenarioPath = flag.String("path", "./", "Path served as document root.")
+	remote       = flag.Bool("remote", false, "Enable remote management of the scenario being run")
 )
 
 type testSlot struct {
@@ -42,6 +44,9 @@ var (
 		startTime: time.Now().Round(time.Second),
 		slots:     []*testSlot{},
 	}
+
+	// This channel forces an immediate reload of the scenario
+	forcedLoad = make(chan bool, 1)
 )
 
 func main() {
@@ -55,7 +60,7 @@ func main() {
 		logW.SetLevel(log.LevelInfo)
 	}
 
-	_, err := filepath.Abs(*path)
+	_, err := filepath.Abs(*scenarioPath)
 	if err != nil {
 		log.Fatal(err.Error())
 		os.Exit(-1)
@@ -63,7 +68,7 @@ func main() {
 
 	// Load the inital per second slots from the
 	// scenario directory
-	loadTest(*path)
+	loadTest(*scenarioPath)
 
 	// Start a service function that tracks over time the slots
 	// and scenarios being used
@@ -145,13 +150,17 @@ func auditWindow() {
 
 	for {
 		select {
+		case <-forcedLoad:
+			logW.Debug(fmt.Sprintf("forced load of %s occurring", *scenarioPath))
+			loadTest(*scenarioPath)
+
 		case <-tick.C:
 			logW.Debug(fmt.Sprintf("using %s", getSlotDir()))
 
 			files, _ := ioutil.ReadDir(getSlotDir())
 			for _, aFile := range files {
 				if aFile.Name() == "finish" {
-					loadTest(*path)
+					loadTest(*scenarioPath)
 					break
 				}
 			}
@@ -159,7 +168,28 @@ func auditWindow() {
 	}
 }
 
+func serveConfigure(w http.ResponseWriter, r *http.Request) {
+
+	if !path.IsAbs(r.URL.Path) {
+		http.Error(w, "configure paths must be absolute", 404)
+		return
+	}
+
+	*scenarioPath = strings.TrimPrefix(r.URL.Path, "/configure")
+
+	select {
+	case forcedLoad <- true:
+	case <-time.After(3 * time.Second):
+		http.Error(w, "configure path although saved, could not be applied immediately", 500)
+	}
+}
+
 func serveHandler(w http.ResponseWriter, r *http.Request) {
+
+	if *remote && strings.HasPrefix(r.URL.Path, "/configure/") {
+		serveConfigure(w, r)
+		return
+	}
 
 	// Locate from the current test scenario which
 	// directory is the appropriate one to serve up
