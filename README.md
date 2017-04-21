@@ -7,18 +7,22 @@ time at which a request is made.  When started this server will examine the -pat
 option to determine the location of one or more directories that are named according
 to the elapsed seconds within a rolling window.  When the location of the content
 to be served is determined based upon the time in seconds within the rolling
-window then the request will be served from that location/
+window then the request will be served from that location.
+
+The time slot at which the test should be restarted and rewound is defined by
+having a slot directory that contains a file "finish".
 
 When starting the web server you would use a command such as:
 
 <pre>
-/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=~/pi-gateway/simulator/scenarios/default -window=60s
+/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=~/pi-gateway/simulator/scenarios/default
 </pre>
 
 If the directory scenarios/default contained two directories with a file named json:
 
 scenarios/default/0/module/status/json
 scenarios/default/30/module/status/json
+scenarios/default/60/finish
 
 Then the result would be that for the first 30 seconds of every minute after 
 the server was started the first json would be served, and the second json served after
