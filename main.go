@@ -136,6 +136,9 @@ func getSlotDir() (dir string) {
 	if slot >= len(testSchedule.slots) {
 		slot = len(testSchedule.slots) - 1
 	} else {
+		if testSchedule.slots[slot].secondSlot > second {
+			slot = slot - 1
+		}
 		if slot < 0 {
 			slot = 0
 		}
