@@ -15,7 +15,7 @@ having a slot directory that contains a file "finish".
 When starting the web server you would use a command such as:
 
 <pre>
-/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=/home/pi/pi-gateway/simulator/scenarios/default
+/home/pi/bin/HttpRoller -listen=127.0.0.1:12345 -path=/home/pi/pi-gateway/simulator/scenarios/portal_builds
 </pre>
 
 If the directory scenarios/default contained two directories with a file named json:
