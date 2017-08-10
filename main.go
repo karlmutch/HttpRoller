@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"crypto/md5"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -23,6 +26,8 @@ var (
 	listen       = flag.String("listen", ":8080", "Address to bind to")
 	scenarioPath = flag.String("path", "./", "Path served as document root.")
 	remote       = flag.Bool("remote", false, "Enable remote management of the scenario being run")
+	scale        = flag.Int("scale", 1, "factor by which to accelerate the relative rate of the clock")
+	compressTime = flag.Duration("compress-time", time.Duration(25*time.Hour), "Compress time scale to remove specified periods of inactivity")
 )
 
 type testSlot struct {
@@ -82,6 +87,23 @@ func main() {
 	}
 }
 
+// hashFile will get the MD5 sum of a file and return it
+//
+func hashFile(fn string) []byte {
+	f, err := os.Open(fn)
+	if err != nil {
+		return []byte{}
+	}
+	defer f.Close()
+
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return []byte{}
+	}
+
+	return h.Sum(nil)
+}
+
 // loadTest examines the scenario directory for the serve directories
 // that will be used and loads them into the testSchedule
 //
@@ -92,12 +114,34 @@ func loadTest(scenario string) (err error) {
 	testSchedule.startTime = time.Now().Round(time.Second)
 	testSchedule.slots = []*testSlot{}
 
+	oldHash := []byte{}
+	newHash := []byte{}
+
 	err = filepath.Walk(scenario,
 		func(path string, f os.FileInfo, err error) error {
 			if path == scenario {
 				return nil
 			}
+
+			// Drop empty test files they are not of any use
+			if f.Size() == 0 {
+				return nil
+			}
 			slot, err := strconv.Atoi(f.Name())
+
+			// The compress-time option is used to collapse uninteresting time periods in the life
+			// of the data that is being transmitted.  The collapse will look for dead air, or for files
+			// the are duplicated and remove them.  In this case we will remove duplicates and later on
+			// will deal with dead air
+			if *compressTime < time.Duration(24*time.Hour) {
+				newHash = hashFile(filepath.Join(path, f.Name()))
+				if len(newHash) != 0 && 0 == bytes.Compare(newHash, oldHash) {
+					log.Info("duplicate file", filepath.Join(path, f.Name()))
+					return nil
+				}
+			}
+			oldHash = newHash
+
 			if err == nil {
 				testSchedule.slots = append(testSchedule.slots, &testSlot{
 					dir:        path,
@@ -117,6 +161,37 @@ func loadTest(scenario string) (err error) {
 		return testSchedule.slots[i].secondSlot < testSchedule.slots[j].secondSlot
 	})
 
+	// Having got the files in order deal with the case of  having large air gaps
+	// in the rolling data
+	//
+	if *compressTime < time.Duration(24*time.Hour) {
+
+		lastAbsSlot := 0
+		lastAdjSlot := 0
+		accumulated := 0
+
+		adjust := int(compressTime.Seconds())
+		for i, _ := range testSchedule.slots {
+
+			// Adjust the slot time down by the total accumulated seconds that
+			// have been removed
+			newAbsSlot := testSchedule.slots[i].secondSlot
+			testSchedule.slots[i].secondSlot -= accumulated
+			newAdjSlot := testSchedule.slots[i].secondSlot
+
+			if testSchedule.slots[i].secondSlot > lastAdjSlot+adjust {
+				dropSecs := testSchedule.slots[i].secondSlot - lastAdjSlot - adjust
+				logW.Debug(fmt.Sprintf("removing %d seconds between %d (%d) and %d (%d)",
+					dropSecs, lastAbsSlot, lastAdjSlot, newAbsSlot, newAdjSlot))
+
+				accumulated += dropSecs
+				testSchedule.slots[i].secondSlot = lastAdjSlot + adjust
+			}
+			lastAdjSlot = newAdjSlot
+			lastAbsSlot = newAbsSlot
+		}
+	}
+
 	logW.Debug(fmt.Sprintf("loaded scenario %s", scenario))
 
 	return err
@@ -126,7 +201,7 @@ func getSlotDir() (dir string) {
 	testSchedule.Lock()
 	defer testSchedule.Unlock()
 
-	second := int(time.Since(testSchedule.startTime).Seconds()) - 1
+	second := int(time.Since(testSchedule.startTime).Seconds()*float64(*scale)) - 1
 	slot := sort.Search(len(testSchedule.slots), func(i int) bool { return testSchedule.slots[i].secondSlot >= second })
 
 	if slot < len(testSchedule.slots) && testSchedule.slots[slot].secondSlot == second {
